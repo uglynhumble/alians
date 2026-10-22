@@ -1,0 +1,33 @@
+{
+  "name": "springs-alliance-site",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "smtp:check": "node scripts/check-smtp.mjs"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "latest",
+    "lucide-react": "latest",
+    "next": "16.2.10",
+    "nodemailer": "latest",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "react-hook-form": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "latest",
+    "@types/node": "latest",
+    "@types/nodemailer": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "16.2.10",
+    "tailwindcss": "4.3.2",
+    "typescript": "^5.9.3"
+  }
+}
