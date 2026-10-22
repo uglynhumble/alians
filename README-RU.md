@@ -1,53 +1,58 @@
 # Сайт ООО «Спрингс Альянс»
 
-Одностраничный B2B-сайт на Next.js 16, React 19, TypeScript и Tailwind CSS 4.
+Одностраничный B2B-сайт на Next.js 16, React 19, TypeScript и Tailwind CSS 4. Production-сборка — статические HTML/CSS/JS и PHP-обработчик формы для REG.RU Host-A.
 
-## Запуск
+## Локальный запуск
 
 ```bash
 npm ci
 npm run dev
 ```
 
-Откройте `http://localhost:3000`. Production-сборка: `npm run build`, затем `npm start`.
-
-Контакты и тексты находятся в `app/content.ts`. Данные перенесены с действующего сайта springs-alians.com. Переменные окружения — в `.env.example`. Форма отправляет письмо со вложениями через SMTP и опционально передаёт JSON в `CRM_WEBHOOK_URL`.
-
-Фотографии продукции и лицензируемые иллюстративные кадры производства сохранены локально в `public/images`; авторы и источники перечислены в `SOURCES.md`.
-
-Перед публикацией актуализируйте юридические документы и подтвердите действительность стандартов ISO.
-
-## SMTP и Outlook Classic
-
-На REG.RU переносится только сайт. Почта остаётся на текущем Microsoft Exchange: MX-запись `springs-alians.ru` указывает на `mail.springs-alians.ru` (`89.109.9.108`). DNS-записи почты при переносе сайта менять не нужно.
-
-Публичный SMTP-порт `587` сейчас отвечает как Microsoft ESMTP, но предлагает только `GSSAPI/NTLM` и не предлагает STARTTLS. Обычного логина и пароля недостаточно для Nodemailer. Администратор текущего Exchange должен выдать один из двух вариантов:
-
-- отдельный SMTP-коннектор с STARTTLS и `LOGIN/PLAIN`, сервисный ящик и пароль;
-- SMTP relay, разрешённый только для фиксированного внешнего IP нового REG.RU-сервера.
-
-Пароль хранится только в файле `.env` на веб-сервере и не коммитится в Git.
-
-Скопируйте `.env.example` в `.env.local`, заполните `SMTP_PASSWORD` и проверьте авторизацию:
+Откройте `http://localhost:3000`. Production-сборка:
 
 ```bash
-node --env-file=.env.local scripts/check-smtp.mjs
+npm run build
 ```
 
-## CI/CD на сервер REG.RU
+Готовый к загрузке на хостинг сайт появится в `out/`. Контакты и тексты находятся в `app/content.ts`, обработчик заявок — в `public/api/request.php`.
 
-Схема рассчитана на VPS/облачный сервер REG.RU с Docker, Docker Compose и Nginx. GitHub Actions в `.github/workflows/ci-cd.yml`:
+## Форма заявки и почта
 
-1. Для pull request и push в `main` запускает ESLint и production-сборку.
-2. После успешной проверки `main` собирает Docker-образ и публикует его в GitHub Container Registry.
-3. По SSH обновляет контейнер на REG.RU. Приложение слушает только `127.0.0.1:3000`; публичный HTTPS должен терминировать Nginx.
+Форма отправляет письмо средствами PHP-хостинга REG.RU:
 
-В GitHub добавьте Actions secrets:
+- получатель: `sale@springs-alians.ru` — текущий Microsoft Exchange;
+- отправитель: `site@springs-alians.com` — технический ящик на Host-A;
+- `Reply-To`: email заказчика из формы;
+- до 10 вложений общим размером до 20 МБ.
 
-- `REG_HOST`, `REG_SSH_PORT`, `REG_SSH_USER`, `REG_SSH_KEY`;
-- `REG_DEPLOY_PATH`, например `/opt/springs-alliance`;
-- `GHCR_USERNAME` и `GHCR_TOKEN` с правом `read:packages` для скачивания закрытого образа на сервер.
+Пароль от текущего Exchange сайту не нужен. Почтовые DNS-записи домена `springs-alians.ru` менять нельзя.
 
-На сервере заранее создайте `$REG_DEPLOY_PATH/.env` по образцу `.env.example`, поставьте права `600` и заполните реальные SMTP-данные. Workflow не перезаписывает этот файл.
+Перед проверкой формы создайте в панели Host-A технический ящик `site@springs-alians.com`. Если у домена `.com` уже есть SPF-запись, её нужно дополнить механизмом REG.RU, а не создавать вторую SPF-запись.
 
-Пример reverse proxy находится в `deploy/nginx.conf.example`. Скопируйте его в `/etc/nginx/sites-available/springs-alliance`, включите сайт, проверьте `nginx -t` и выпустите TLS-сертификат. Лимит `client_max_body_size 25m` нужен для заявок с файлами до 20 МБ.
+## CI/CD для REG.RU Host-A
+
+Workflow `.github/workflows/ci-cd.yml` проверяет код, собирает `out/`, проверяет PHP и после push в `main` загружает сайт на Host-A по SSH/rsync.
+
+В GitHub нужно добавить Actions secrets:
+
+- `REG_HOST` — имя сервера из раздела «Доступы»;
+- `REG_SSH_PORT` — обычно `22`;
+- `REG_SSH_USER` — основной логин хостинга вида `u1234567`;
+- `REG_SSH_KEY` — приватный SSH-ключ для GitHub Actions;
+- `REG_DEPLOY_PATH` — полный каталог сайта из ispmanager.
+
+Workflow очищает устаревшие файлы только внутри `REG_DEPLOY_PATH` и не удаляет каталог `.well-known` для SSL.
+
+## Первичная настройка Host-A
+
+1. Войдите в ispmanager из личного кабинета REG.RU.
+2. Добавьте `springs-alians.com` как WWW-домен и включите PHP FastCGI.
+3. Узнайте полный корневой каталог сайта и сохраните его как `REG_DEPLOY_PATH`.
+4. Добавьте публичный CI/CD SSH-ключ в `~/.ssh/authorized_keys`.
+5. Создайте `site@springs-alians.com`.
+6. Добавьте GitHub Actions secrets и запустите workflow.
+7. Проверьте сайт на техническом адресе хостинга, форму и вложения.
+8. Только после проверки измените A-записи `@` и `www` домена `.com`. MX/TXT/CNAME домена `.ru` оставьте без изменений.
+
+Перед публикацией актуализируйте юридические документы и подтвердите действительность стандартов ISO.

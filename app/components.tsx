@@ -54,12 +54,13 @@ export function Faq() {
 }
 
 type FormData = { task: string; springType: string; details: string; quantity: string; prototype: boolean; name: string; company: string; email: string; phone: string; consent: boolean };
+const initialFormData: FormData = { task: "По чертежу", springType: "Пружина сжатия", details: "", quantity: "", prototype: false, name: "", company: "", email: "", phone: "", consent: false };
 
 export function RequestForm() {
   const [step, setStep] = useState(1);
   const [status, setStatus] = useState("");
   const [files, setFiles] = useState<File[]>([]);
-  const [data, setData] = useState<FormData>({ task: "По чертежу", springType: "Пружина сжатия", details: "", quantity: "", prototype: false, name: "", company: "", email: "", phone: "", consent: false });
+  const [data, setData] = useState<FormData>({ ...initialFormData });
   const formRef = useRef<HTMLFormElement>(null);
   const update = (key: keyof FormData, value: string | boolean) => setData(v => ({ ...v, [key]: value }));
   const valid = step === 1 ? !!data.task : step === 2 ? data.details.trim().length >= 10 && Number(data.quantity) > 0 : !!data.name && /.+@.+\..+/.test(data.email) && data.consent;
@@ -67,11 +68,12 @@ export function RequestForm() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); if (!valid) return setStatus("Заполните имя, корректный email и подтвердите согласие.");
     setStatus("Отправляем заявку…");
-    const body = new FormData(); Object.entries(data).forEach(([k, v]) => body.append(k, String(v))); files.forEach(f => body.append("files", f));
-    try { const r = await fetch("/api/request", { method: "POST", body }); const result = await r.json().catch(() => ({})) as { error?: string }; if (!r.ok) throw new Error(result.error); setStatus("Заявка принята. Инженер свяжется с вами после проверки исходных данных."); formRef.current?.reset(); }
+    const body = new window.FormData(); Object.entries(data).forEach(([k, v]) => body.append(k, String(v))); files.forEach(f => body.append("files[]", f));
+    const honeypot = formRef.current?.elements.namedItem("website") as HTMLInputElement | null; body.append("website", honeypot?.value || "");
+    try { const r = await fetch("/api/request.php", { method: "POST", body }); const result = await r.json().catch(() => ({})) as { error?: string }; if (!r.ok) throw new Error(result.error); setStatus("Заявка принята. Инженер свяжется с вами после проверки исходных данных."); formRef.current?.reset(); setData({ ...initialFormData }); setFiles([]); setStep(1); }
     catch (error) { setStatus(error instanceof Error && error.message ? error.message : "Не удалось отправить заявку. Проверьте соединение или напишите нам по email."); }
   };
-  return <form ref={formRef} className="request-form" onSubmit={submit} noValidate>
+  return <form ref={formRef} className="request-form" onSubmit={submit} noValidate><label className="form-honeypot" aria-hidden="true">Website<input name="website" type="text" tabIndex={-1} autoComplete="off"/></label>
     <div className="form-progress" aria-label={`Шаг ${step} из 3`}><span style={{ width: `${step * 33.333}%` }}/></div>
     <div className="form-meta"><span>Шаг {step} из 3</span><b>{step === 1 ? "Постановка задачи" : step === 2 ? "Технические данные" : "Контакты и файлы"}</b></div>
     {step === 1 && <fieldset><legend>Как вы хотите поставить задачу?</legend><div className="choice-grid">{["По чертежу", "По техническому заданию", "По образцу", "По параметрам", "Нужно проектирование"].map(x => <label className={data.task === x ? "choice choice--active" : "choice"} key={x}><input type="radio" name="task" checked={data.task === x} onChange={() => update("task", x)}/><span>{x}</span><Check/></label>)}</div></fieldset>}

@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   quality:
@@ -24,33 +23,26 @@ jobs:
       - run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
+      - run: php -l out/api/request.php
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-site
+          path: out/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
 
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: quality
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set image name
-        run: echo "IMAGE_NAME=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]'):${{ github.sha }}" >> "$GITHUB_ENV"
-
-      - uses: docker/login-action@v3
+      - uses: actions/download-artifact@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ env.IMAGE_NAME }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          name: static-site
+          path: out
 
       - name: Configure SSH
         env:
@@ -63,26 +55,14 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
 
-      - name: Upload deployment descriptor
+      - name: Deploy to REG.RU Host-A
         env:
           SSH_HOST: ${{ secrets.REG_HOST }}
           SSH_PORT: ${{ secrets.REG_SSH_PORT }}
           SSH_USER: ${{ secrets.REG_SSH_USER }}
           DEPLOY_PATH: ${{ secrets.REG_DEPLOY_PATH }}
         run: |
+          case "$DEPLOY_PATH" in ""|"/"|"."|"~") echo "Unsafe REG_DEPLOY_PATH"; exit 1;; esac
           port="${SSH_PORT:-22}"
-          ssh -p "$port" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEPLOY_PATH'"
-          scp -P "$port" compose.production.yml "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/compose.production.yml"
-
-      - name: Deploy on REG.RU server
-        env:
-          SSH_HOST: ${{ secrets.REG_HOST }}
-          SSH_PORT: ${{ secrets.REG_SSH_PORT }}
-          SSH_USER: ${{ secrets.REG_SSH_USER }}
-          DEPLOY_PATH: ${{ secrets.REG_DEPLOY_PATH }}
-          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-        run: |
-          port="${SSH_PORT:-22}"
-          printf '%s' "$GHCR_TOKEN" | ssh -p "$port" "$SSH_USER@$SSH_HOST" "docker login ghcr.io -u '$GHCR_USERNAME' --password-stdin"
-          ssh -p "$port" "$SSH_USER@$SSH_HOST" "test -f '$DEPLOY_PATH/.env' && cd '$DEPLOY_PATH' && IMAGE_NAME='$IMAGE_NAME' docker compose -f compose.production.yml pull && IMAGE_NAME='$IMAGE_NAME' docker compose -f compose.production.yml up -d --remove-orphans"
+          ssh -p "$port" "$SSH_USER@$SSH_HOST" "test -d '$DEPLOY_PATH'"
+          rsync -az --delete --exclude='.well-known/' -e "ssh -p $port" out/ "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/"
