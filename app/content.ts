@@ -3,6 +3,8 @@ export const company = {
   legalName: "ООО «Спрингс Альянс»",
   descriptor: "Производство промышленных пружин",
   email: "sale@springs-alians.ru",
+  website: "https://springs-alians.ru/",
+  websiteLabel: "springs-alians.ru",
   phoneLabel: "+7 (8313) 27-23-49",
   phoneHref: "+78313272349",
   phoneSecondaryLabel: "+7 (8313) 27-22-55",
